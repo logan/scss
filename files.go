@@ -12,14 +12,6 @@ type File struct {
 	Bytes []byte
 }
 
-func (f *File) OpenRelative(name string) (*File, error) {
-	rel, err := f.FileSystem.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	return openFile(f.FileSystem, rel, name)
-}
-
 func openFile(fs http.FileSystem, httpFile http.File, name string) (*File, error) {
 	fileInfo, err := httpFile.Stat()
 	if err != nil {
@@ -38,4 +30,12 @@ func openFile(fs http.FileSystem, httpFile http.File, name string) (*File, error
 	}
 	f.Bytes = f.Bytes[:n]
 	return f, nil
+}
+
+func (f *File) OpenRelative(name string) (*File, error) {
+	rel, err := f.FileSystem.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return openFile(f.FileSystem, rel, name)
 }

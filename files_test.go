@@ -1,4 +1,4 @@
-package sass
+package scss
 
 import (
 	"errors"

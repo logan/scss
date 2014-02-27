@@ -11,7 +11,9 @@ import (
 type TokenType int
 
 const (
-	IdentToken TokenType = iota
+	ErrorToken TokenType = iota
+
+	IdentToken
 	FunctionToken
 	AtKeywordToken
 	HashToken
@@ -50,6 +52,8 @@ const (
 
 func (tt TokenType) String() string {
 	switch tt {
+	case ErrorToken:
+		return "ErrorToken"
 	case IdentToken:
 		return "IdentToken"
 	case FunctionToken:
@@ -127,6 +131,7 @@ type Token struct {
 func NewToken(tokenType TokenType, value interface{}) *Token { return &Token{tokenType, value} }
 func NewEOFToken() *Token                                    { return NewToken(EOFToken, nil) }
 func NewDelimToken(ch rune) *Token                           { return NewToken(DelimToken, ch) }
+func NewErrorToken(err error) *Token                         { return NewToken(ErrorToken, err) }
 
 func (t Token) String() string {
 	return fmt.Sprintf("{%s=%v}", t.TokenType, t.Value)
@@ -179,12 +184,12 @@ func NewTokenizer(runeScanner io.RuneScanner) *Tokenizer {
 	return &Tokenizer{NewScanner(runeScanner)}
 }
 
-func (tk *Tokenizer) ConsumeToken() (*Token, error) {
+func (tk *Tokenizer) ConsumeToken() *Token {
 	var ch rune
 	for tk.Error() == nil {
 		ch = tk.Consume1()
 		if ch == EOFRune {
-			return NewEOFToken(), nil
+			return NewEOFToken()
 		}
 		if ch != '/' {
 			break
@@ -203,58 +208,61 @@ func (tk *Tokenizer) ConsumeToken() (*Token, error) {
 				star = tk.Current() == '*'
 			}
 		} else {
-			return NewDelimToken(ch), nil
+			return NewDelimToken(ch)
 		}
+	}
+	if tk.Error() != nil {
+		return NewErrorToken(tk.Error())
 	}
 	switch ch {
 	case '"', '\'':
-		return tk.consumeStringToken(ch), nil
+		return tk.consumeStringToken(ch)
 	case '#':
 		next3 := tk.Peek3()
 		if isName(next3[0]) || (next3[0] == '\\' && next3[1] != '\n') {
 			tk.Consume1()
 			// TODO: distinguish idents
 			name := tk.consumeName()
-			return NewToken(HashToken, name), nil
+			return NewToken(HashToken, name)
 		}
-		return NewDelimToken(ch), nil
+		return NewDelimToken(ch)
 	case ',':
-		return NewToken(CommaToken, nil), nil
+		return NewToken(CommaToken, nil)
 	case ':':
-		return NewToken(ColonToken, nil), nil
+		return NewToken(ColonToken, nil)
 	case ';':
-		return NewToken(SemicolonToken, nil), nil
+		return NewToken(SemicolonToken, nil)
 	case '<':
 		if tk.PeekString() == "!--" {
 			tk.Consume(3)
-			return NewToken(CDOToken, nil), nil
+			return NewToken(CDOToken, nil)
 		}
-		return NewDelimToken(ch), nil
+		return NewDelimToken(ch)
 	case '@':
 		if startsIdent(tk.Peek3()) {
 			tk.Consume(1)
 			name := tk.consumeName()
-			return NewToken(AtKeywordToken, name), nil
+			return NewToken(AtKeywordToken, name)
 		}
-		return NewDelimToken(ch), nil
+		return NewDelimToken(ch)
 	case '\\':
 		if tk.Next() != '\n' {
 			return tk.consumeIdentLike()
 		}
 		// Technically this is a parse error.
-		return NewDelimToken(ch), nil
+		return NewDelimToken(ch)
 	case '(':
-		return NewToken(LParenToken, nil), nil
+		return NewToken(LParenToken, nil)
 	case ')':
-		return NewToken(RParenToken, nil), nil
+		return NewToken(RParenToken, nil)
 	case '[':
-		return NewToken(LSquareToken, nil), nil
+		return NewToken(LSquareToken, nil)
 	case ']':
-		return NewToken(RSquareToken, nil), nil
+		return NewToken(RSquareToken, nil)
 	case '{':
-		return NewToken(LCurlyToken, nil), nil
+		return NewToken(LCurlyToken, nil)
 	case '}':
-		return NewToken(RCurlyToken, nil), nil
+		return NewToken(RCurlyToken, nil)
 	case '$':
 		return tk.delimOrMatchToken(ch, SuffixMatchToken)
 	case '*':
@@ -264,7 +272,7 @@ func (tk *Tokenizer) ConsumeToken() (*Token, error) {
 		if isDigit(next3[0]) || (next3[0] == '.' && isDigit(next3[1])) {
 			return tk.consumeNumeric()
 		}
-		return NewDelimToken(ch), nil
+		return NewDelimToken(ch)
 	case '-':
 		next3 := tk.Peek3()
 		if isDigit(next3[0]) || (next3[0] == '.' && isDigit(next3[1])) {
@@ -275,26 +283,26 @@ func (tk *Tokenizer) ConsumeToken() (*Token, error) {
 		}
 		if next3[0] == '-' && next3[1] == '>' {
 			tk.Consume(2)
-			return NewToken(CDCToken, nil), nil
+			return NewToken(CDCToken, nil)
 		}
-		return NewDelimToken(ch), nil
+		return NewDelimToken(ch)
 	case '.':
 		if isDigit(tk.Next()) {
 			return tk.consumeNumeric()
 		}
-		return NewDelimToken(ch), nil
+		return NewDelimToken(ch)
 	case '^':
 		return tk.delimOrMatchToken(ch, PrefixMatchToken)
 	case '|':
 		switch tk.Next() {
 		case '=':
 			tk.Consume1()
-			return NewToken(DashMatchToken, nil), nil
+			return NewToken(DashMatchToken, nil)
 		case '|':
 			tk.Consume1()
-			return NewToken(ColumnToken, nil), nil
+			return NewToken(ColumnToken, nil)
 		default:
-			return NewDelimToken(ch), nil
+			return NewDelimToken(ch)
 		}
 	case '~':
 		return tk.delimOrMatchToken(ch, IncludeMatchToken)
@@ -312,27 +320,27 @@ func (tk *Tokenizer) ConsumeToken() (*Token, error) {
 		if isNameStart(ch) {
 			return tk.consumeIdentLike()
 		}
-		return NewDelimToken(ch), nil
+		return NewDelimToken(ch)
 	}
 }
 
-func (tk *Tokenizer) consumeNumeric() (*Token, error) {
+func (tk *Tokenizer) consumeNumeric() *Token {
 	num, err := tk.consumeNumber()
 	if err != nil {
-		return nil, err
+		return NewErrorToken(err)
 	}
 	next3 := tk.Peek3()
 	if startsIdent([]rune{tk.Current(), next3[0], next3[1]}) {
 		name := tk.consumeName()
 		num.Unit = name
-		return NewToken(DimensionToken, num), nil
+		return NewToken(DimensionToken, num)
 	}
 	if tk.Current() == '%' {
 		num.Unit = "%"
-		return NewToken(PercentageToken, num), nil
+		return NewToken(PercentageToken, num)
 	}
 	tk.Reconsume()
-	return NewToken(NumberToken, num), nil
+	return NewToken(NumberToken, num)
 }
 
 func (tk *Tokenizer) consumeNumber() (*Numeric, error) {
@@ -400,24 +408,24 @@ func (tk *Tokenizer) consumeName() string {
 	return buf.String()
 }
 
-func (tk *Tokenizer) consumeIdentLike() (*Token, error) {
+func (tk *Tokenizer) consumeIdentLike() *Token {
 	name := tk.consumeName()
 	if tk.Next() == '(' {
 		if strings.ToLower(name) == "url" {
 			return tk.consumeUrl()
 		}
-		return NewToken(FunctionToken, name), nil
+		return NewToken(FunctionToken, name)
 	}
-	return NewToken(IdentToken, name), nil
+	return NewToken(IdentToken, name)
 }
 
-func (tk *Tokenizer) consumeUrl() (*Token, error) {
+func (tk *Tokenizer) consumeUrl() *Token {
 	tok := NewToken(UrlToken, "")
 	tk.Consume(2)
 	tk.skipWhitespace()
 	cur := tk.Current()
 	if cur < 0 {
-		return tok, nil
+		return tok
 	}
 	if cur == '"' || cur == '\'' {
 		strTok := tk.consumeStringToken(cur)
@@ -430,7 +438,7 @@ func (tk *Tokenizer) consumeUrl() (*Token, error) {
 			return tk.consumeBadUrlRemnants()
 		}
 		tok.Value = strTok.Value
-		return tok, nil
+		return tok
 	}
 
 	buf := bytes.NewBuffer(make([]byte, 0, 64))
@@ -459,10 +467,10 @@ func (tk *Tokenizer) consumeUrl() (*Token, error) {
 		cur = tk.Consume1()
 	}
 	tok.Value = buf.String()
-	return tok, nil
+	return tok
 }
 
-func (tk *Tokenizer) consumeBadUrlRemnants() (*Token, error) {
+func (tk *Tokenizer) consumeBadUrlRemnants() *Token {
 	for {
 		if tk.Current() == EOFRune || tk.Current() == ')' {
 			break
@@ -472,15 +480,15 @@ func (tk *Tokenizer) consumeBadUrlRemnants() (*Token, error) {
 		}
 		tk.Consume1()
 	}
-	return NewToken(BadUrlToken, nil), nil
+	return NewToken(BadUrlToken, nil)
 }
 
-func (tk *Tokenizer) delimOrMatchToken(ch rune, matchType TokenType) (*Token, error) {
+func (tk *Tokenizer) delimOrMatchToken(ch rune, matchType TokenType) *Token {
 	if tk.Next() == '=' {
 		tk.Consume1()
-		return NewToken(matchType, nil), nil
+		return NewToken(matchType, nil)
 	}
-	return NewDelimToken(ch), nil
+	return NewDelimToken(ch)
 }
 
 func (tk *Tokenizer) consumeStringToken(delim rune) *Token {
@@ -541,7 +549,7 @@ func (tk *Tokenizer) consumeEscape() rune {
 	return rune(code)
 }
 
-func (tk *Tokenizer) consumeUnicodeRange() (*Token, error) {
+func (tk *Tokenizer) consumeUnicodeRange() *Token {
 	tk.Consume(2) // skip leading + and consume first digit
 	code, length := tk.consumeHexCode(6)
 	var qs uint
@@ -551,7 +559,7 @@ func (tk *Tokenizer) consumeUnicodeRange() (*Token, error) {
 	if qs > 0 {
 		start := rune(code << (4 * qs))
 		end := rune(start | ((1 << (4 * qs)) - 1))
-		return NewToken(UnicodeRangeToken, UnicodeRange{start, end}), nil
+		return NewToken(UnicodeRangeToken, UnicodeRange{start, end})
 	}
 	start := rune(code)
 	end := start
@@ -561,7 +569,7 @@ func (tk *Tokenizer) consumeUnicodeRange() (*Token, error) {
 		code, _ := tk.consumeHexCode(6)
 		end = rune(code)
 	}
-	return NewToken(UnicodeRangeToken, UnicodeRange{start, end}), nil
+	return NewToken(UnicodeRangeToken, UnicodeRange{start, end})
 }
 
 func (tk *Tokenizer) skipWhitespace() {

@@ -137,6 +137,7 @@ func (t Token) String() string {
 	return fmt.Sprintf("{%s=%v}", t.TokenType, t.Value)
 }
 
+type Identifier string
 type NumberType int
 
 const (
@@ -191,6 +192,11 @@ func (tk *Tokenizer) ConsumeToken() *Token {
 		if ch == EOFRune {
 			return NewEOFToken()
 		}
+		if isWhitespace(ch) {
+			tk.skipWhitespace()
+			tk.Reconsume()
+			return NewToken(WhitespaceToken, nil)
+		}
 		if ch != '/' {
 			break
 		}
@@ -220,9 +226,12 @@ func (tk *Tokenizer) ConsumeToken() *Token {
 	case '#':
 		next3 := tk.Peek3()
 		if isName(next3[0]) || (next3[0] == '\\' && next3[1] != '\n') {
+			isIdent := startsIdent(tk.Peek3())
 			tk.Consume1()
-			// TODO: distinguish idents
 			name := tk.consumeName()
+			if isIdent {
+				return NewToken(HashToken, Identifier(name))
+			}
 			return NewToken(HashToken, name)
 		}
 		return NewDelimToken(ch)
@@ -308,7 +317,7 @@ func (tk *Tokenizer) ConsumeToken() *Token {
 		return tk.delimOrMatchToken(ch, IncludeMatchToken)
 	case 'U', 'u':
 		next3 := tk.Peek3()
-		if next3[0] == '+' && isHexDigit(next3[1]) {
+		if next3[0] == '+' && (next3[1] == '?' || isHexDigit(next3[1])) {
 			return tk.consumeUnicodeRange()
 		} else {
 			return tk.consumeIdentLike()
@@ -414,9 +423,10 @@ func (tk *Tokenizer) consumeIdentLike() *Token {
 		if strings.ToLower(name) == "url" {
 			return tk.consumeUrl()
 		}
+		tk.Consume1()
 		return NewToken(FunctionToken, name)
 	}
-	return NewToken(IdentToken, name)
+	return NewToken(IdentToken, Identifier(name))
 }
 
 func (tk *Tokenizer) consumeUrl() *Token {
@@ -550,24 +560,30 @@ func (tk *Tokenizer) consumeEscape() rune {
 }
 
 func (tk *Tokenizer) consumeUnicodeRange() *Token {
+	var code, length int
 	tk.Consume(2) // skip leading + and consume first digit
-	code, length := tk.consumeHexCode(6)
+	if isHexDigit(tk.Current()) {
+		code, length = tk.consumeHexCode(6)
+		tk.Consume1()
+	}
 	var qs uint
-	for ; qs < uint(6-length) && tk.Next() == '?'; qs++ {
+	for ; qs < uint(6-length) && tk.Current() == '?'; qs++ {
 		tk.Consume1()
 	}
 	if qs > 0 {
 		start := rune(code << (4 * qs))
 		end := rune(start | ((1 << (4 * qs)) - 1))
+		tk.Reconsume()
 		return NewToken(UnicodeRangeToken, UnicodeRange{start, end})
 	}
 	start := rune(code)
 	end := start
-	next3 := tk.Peek3()
-	if next3[0] == '-' && isHexDigit(next3[1]) {
-		tk.Consume(2) // skip leading - and consume first digit
+	if tk.Current() == '-' && isHexDigit(tk.Next()) {
+		tk.Consume(1) // skip leading -
 		code, _ := tk.consumeHexCode(6)
 		end = rune(code)
+	} else {
+		tk.Reconsume()
 	}
 	return NewToken(UnicodeRangeToken, UnicodeRange{start, end})
 }

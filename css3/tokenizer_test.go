@@ -72,10 +72,10 @@ func TestConsumeToken(t *testing.T) {
 
 	Convey("U+0023 NUMBER SIGN (#)", t, func() {
 		So("#", shouldTokenize, NewDelimToken('#'))
-		So("#abc", shouldTokenize, NewToken(HashToken, "abc"))
+		So("#abc", shouldTokenize, NewToken(HashToken, Identifier("abc")))
 		So("#123abc", shouldTokenize, NewToken(HashToken, "123abc"))
 		So("#\\\n", shouldTokenize, NewDelimToken('#'))
-		So(`#\`, shouldTokenize, NewToken(HashToken, "\ufffd"))
+		So(`#\`, shouldTokenize, NewToken(HashToken, Identifier("\ufffd")))
 		So("#=", shouldTokenize, NewDelimToken('#'))
 	})
 
@@ -116,7 +116,7 @@ func TestConsumeToken(t *testing.T) {
 	Convey("U+002D MINUS (-)", t, func() {
 		So("-", shouldTokenize, NewDelimToken('-'))
 		So("-1", shouldTokenize, NewToken(NumberToken, &Numeric{Repr: "-1", Integer: -1}))
-		So("-a", shouldTokenize, NewToken(IdentToken, "-a"))
+		So("-a", shouldTokenize, NewToken(IdentToken, Identifier("-a")))
 		So("--->", shouldTokenize, NewDelimToken('-'))
 		So("-->", shouldTokenize, NewToken(CDCToken, nil))
 		So("->", shouldTokenize, NewDelimToken('-'))
@@ -248,10 +248,10 @@ func TestConsumeToken(t *testing.T) {
 	})
 
 	Convey("identifier", t, func() {
-		So("test", shouldTokenize, NewToken(IdentToken, "test"))
-		So("test ing", shouldTokenize, NewToken(IdentToken, "test"))
+		So("test", shouldTokenize, NewToken(IdentToken, Identifier("test")))
+		So("test ing", shouldTokenize, NewToken(IdentToken, Identifier("test")))
 		So("test(ing)", shouldTokenize, NewToken(FunctionToken, "test"))
-		So(`\'test\'`, shouldTokenize, NewToken(IdentToken, "'test'"))
+		So(`\'test\'`, shouldTokenize, NewToken(IdentToken, Identifier("'test'")))
 		So("\\\n", shouldTokenize, NewDelimToken('\\'))
 
 		So("url(ing)", shouldTokenize, NewToken(UrlToken, "ing"))
@@ -271,7 +271,8 @@ func TestConsumeToken(t *testing.T) {
 		So("url(x\\\n", shouldTokenize, NewToken(BadUrlToken, nil))
 		So("url(x \nx", shouldTokenize, NewToken(BadUrlToken, nil))
 		So("url('x\n')", shouldTokenize, NewToken(BadUrlToken, nil))
-		So("url('x\n\\)x)y", shouldTokenize, NewToken(BadUrlToken, nil), NewToken(IdentToken, "y"))
+		So("url('x\n\\)x)y", shouldTokenize,
+			NewToken(BadUrlToken, nil), NewToken(IdentToken, Identifier("y")))
 		So("url(\001)", shouldTokenize, NewToken(BadUrlToken, nil))
 		So("url(\\001)", shouldTokenize, NewToken(UrlToken, "\001"))
 	})
@@ -281,8 +282,10 @@ func TestConsumeToken(t *testing.T) {
 			return NewToken(UnicodeRangeToken, UnicodeRange{start, end})
 		}
 
-		So("u+u", shouldTokenize, NewToken(IdentToken, "u"))
+		So("u+u", shouldTokenize, NewToken(IdentToken, Identifier("u")))
 		So("u+0", shouldTokenize, urange(0, 0))
+		So("u+?", shouldTokenize, urange(0, 0xf))
+		So("u+??", shouldTokenize, urange(0, 0xff))
 		So("u+00100?", shouldTokenize, urange(0x1000, 0x100f))
 		So("u+001???", shouldTokenize, urange(0x1000, 0x1fff))
 		So("u+001000?", shouldTokenize, urange(0x1000, 0x1000))

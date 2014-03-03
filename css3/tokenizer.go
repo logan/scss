@@ -161,6 +161,17 @@ func (n Numeric) String() string {
 	return fmt.Sprintf("<num(%s):%s%s>", t, n.Repr, n.Unit)
 }
 
+func (n *Numeric) Float64() float64 {
+	switch n.NumberType {
+	case Integer:
+		return float64(n.Integer)
+	case Float:
+		return n.Float
+	default:
+		return 0
+	}
+}
+
 func (n *Numeric) parse(repr string) (err error) {
 	n.Repr = repr
 	switch n.NumberType {

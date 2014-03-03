@@ -170,6 +170,84 @@ func (n *FunctionNode) TestRepr() interface{} {
 	return append([]interface{}{"function", n.Name}, nodeListTestRepr(n.Values)...)
 }
 
+func (n *FunctionNode) Params() []Node {
+	var needComma bool
+	params := make([]Node, 0)
+	for _, v := range n.Values {
+		if tn, ok := v.(*TokenNode); ok {
+			switch tn.TokenType {
+			case WhitespaceToken:
+				continue
+			case CommaToken:
+				if needComma {
+					needComma = false
+					continue
+				} else {
+					return nil
+				}
+			}
+		}
+		if needComma {
+			return nil
+		}
+		params = append(params, v)
+		needComma = true
+	}
+	return params
+}
+
+func (n *FunctionNode) Color() *Color {
+	name := toLower(n.Name)
+	switch name {
+	case "rgb":
+		if cs, ok := n.requireFloats("", "", ""); ok {
+			return RGB(cs[0]/255, cs[1]/255, cs[2]/255)
+		}
+		if cs, ok := n.requireFloats("%", "%", "%"); ok {
+			return RGB(cs[0]/100, cs[1]/100, cs[2]/100)
+		}
+	case "rgba":
+		if cs, ok := n.requireFloats("", "", "", ""); ok {
+			return RGBA(cs[0]/255, cs[1]/255, cs[2]/255, cs[3])
+		}
+		if cs, ok := n.requireFloats("%", "%", "%", ""); ok {
+			return RGBA(cs[0]/100, cs[1]/100, cs[2]/100, cs[3])
+		}
+	case "hsl":
+		if cs, ok := n.requireFloats("", "%", "%"); ok {
+			return HSL(normDeg(cs[0]), cs[1]/100, cs[2]/100)
+		}
+		return nil
+	case "hsla":
+		if cs, ok := n.requireFloats("", "%", "%", ""); ok {
+			return HSLA(normDeg(cs[0]), cs[1]/100, cs[2]/100, cs[3])
+		}
+	}
+	return nil
+}
+
+func (n *FunctionNode) requireFloats(units ...string) ([]float64, bool) {
+	params := n.Params()
+	if len(params) != len(units) {
+		return nil, false
+	}
+	for i, unit := range units {
+		if num, ok := params[i].(*NumberNode); !ok || num.Unit != unit {
+			return nil, false
+		}
+	}
+	result := make([]float64, len(params))
+	for i, param := range params {
+		num := param.(*NumberNode)
+		if num.NumberType == Integer {
+			result[i] = float64(num.Integer)
+		} else {
+			result[i] = num.Float
+		}
+	}
+	return result, true
+}
+
 type HashNode struct {
 	Hash         string
 	Unrestricted bool
@@ -313,12 +391,17 @@ func (p *Parser) debug(s ...interface{}) {
 	}
 }
 
-func NewParser(runeScanner io.RuneScanner) *Parser {
-	p := &Parser{tokenizer: NewTokenizer(runeScanner)}
+func newParser(runeScanner io.RuneScanner, debugOn bool) *Parser {
+	p := &Parser{tokenizer: NewTokenizer(runeScanner), debugOn: debugOn}
 	p.current = p.tokenizer.ConsumeToken()
+	p.debug("Consume:", p.current.String())
 	p.next = p.tokenizer.ConsumeToken()
 	return p
 }
+
+func NewParser(runeScanner io.RuneScanner) *Parser { return newParser(runeScanner, false) }
+
+func NewDebugParser(runeScanner io.RuneScanner) *Parser { return newParser(runeScanner, true) }
 
 func (p *Parser) consume1() {
 	if p.reconsume {
@@ -590,4 +673,15 @@ func caseInsensitiveCompare(s1, s2 string) bool {
 		}
 	}
 	return true
+}
+
+func toLower(s string) string {
+	runes := make([]rune, 0, len(s))
+	for _, ch := range s {
+		if ch >= 'A' && ch <= 'Z' {
+			ch += 0x20
+		}
+		runes = append(runes, ch)
+	}
+	return string(runes)
 }

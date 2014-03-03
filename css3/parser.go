@@ -265,6 +265,10 @@ func (n *HashNode) TestRepr() interface{} {
 	return []interface{}{"hash", n.Hash, rest}
 }
 
+func (n *HashNode) Color() *Color {
+	return ColorFromHexCode(n.Hash)
+}
+
 type NumberNode struct {
 	*Numeric
 	Type string
@@ -340,6 +344,13 @@ func (n *TokenNode) TestRepr() interface{} {
 	default:
 		return []interface{}{"error", n.TokenType.String()}
 	}
+}
+
+func (n *TokenNode) Color() *Color {
+	if n.TokenType == IdentToken {
+		return ColorFromName(string(n.Value.(Identifier)))
+	}
+	return nil
 }
 
 func NewTokenNode(token *Token) Node {

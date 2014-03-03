@@ -252,6 +252,10 @@ func ColorFromString(s string) *Color {
 	return ColorFromNodes(nodes)
 }
 
+type ColorProvider interface {
+	Color() *Color
+}
+
 func ColorFromNodes(nodes []Node) *Color {
 	for len(nodes) > 0 {
 		if n, ok := nodes[0].(*TokenNode); ok && n.TokenType == WhitespaceToken {
@@ -263,19 +267,10 @@ func ColorFromNodes(nodes []Node) *Color {
 	if len(nodes) == 0 {
 		return nil
 	}
-	switch n := nodes[0].(type) {
-	case *FunctionNode:
-		return n.Color()
-	case *HashNode:
-		return ColorFromHexCode(n.Hash)
-	case *TokenNode:
-		if n.TokenType == IdentToken {
-			return ColorFromName(string(n.Value.(Identifier)))
-		}
-		return nil
-	default:
-		return nil
+	if cn, ok := nodes[0].(ColorProvider); ok {
+		return cn.Color()
 	}
+	return nil
 }
 
 func ColorFromName(name string) *Color {

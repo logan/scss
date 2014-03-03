@@ -10,10 +10,16 @@ import (
 
 func TestColors(t *testing.T) {
 	shouldParseInto := func(actual interface{}, expected ...interface{}) (msg string) {
+		scale := 1.0
+		if len(expected) > 1 {
+			scale = expected[1].(float64)
+		}
 		testCase := actual.(string)
 		color := ColorFromString(testCase)
 		if expected[0] == nil {
 			msg = ShouldBeNil(color)
+		} else if color == nil {
+			msg = ShouldNotBeNil(color)
 		} else if str, ok := expected[0].(string); ok {
 			msg = ShouldResemble(color.TestRepr(), str)
 		} else if nums, ok := expected[0].([]interface{}); ok {
@@ -26,6 +32,9 @@ func TestColors(t *testing.T) {
 					codes[i] = n
 				default:
 					t.Fatal("don't know how to parse expected value of %#v", nums)
+				}
+				if i < 3 {
+					codes[i] /= scale
 				}
 			}
 			msg = ShouldResemble(color.TestRepr(), codes)
@@ -56,11 +65,27 @@ func TestColors(t *testing.T) {
 		return
 	}
 
-	Convey("Colors", t, func() {
-		data := readJson("css-parsing-tests/color3.json", t)
-		testSuite := data.([]interface{})
+	batchTest := func(actual interface{}, expected ...interface{}) string {
+		testSuite := actual.([]interface{})
+		scale := expected[0].(float64)
 		for i := 0; i < len(testSuite); i += 2 {
-			So(testSuite[i], shouldParseInto, testSuite[i+1])
+			if msg := shouldParseInto(testSuite[i], testSuite[i+1], scale); msg != "" {
+				return msg
+			}
 		}
-	})
+		return ""
+	}
+
+	test := func(path string, scale float64) {
+		Convey(path, t, func() {
+			data := readJson(path, t)
+			testSuite := data.([]interface{})
+			So(testSuite, batchTest, scale)
+			return
+		})
+	}
+
+	test("css-parsing-tests/color3.json", 1)
+	test("css-parsing-tests/color3_hsl.json", 1)
+	test("css-parsing-tests/color3_keywords.json", 255)
 }
